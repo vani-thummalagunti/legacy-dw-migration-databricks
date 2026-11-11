@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+venv/
+
+# Databricks & Delta
+.spark-warehouse/
+derby.log
+metastore_db/
+checkpoint/
+_delta_log/
+
+# Outputs
+data/
+reports/*.html
+reports/*.csv
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db

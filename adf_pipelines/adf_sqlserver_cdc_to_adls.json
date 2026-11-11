@@ -1,0 +1,99 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "factoryName": {
+      "type": "string",
+      "defaultValue": "adf-migration-prod"
+    }
+  },
+  "resources": [
+    {
+      "name": "[concat(parameters('factoryName'), '/pl_sqlserver_cdc_to_adls')]",
+      "type": "Microsoft.DataFactory/factories/pipelines",
+      "apiVersion": "2018-06-01",
+      "properties": {
+        "description": "Ingests SQL Server Change Tracking incremental delta into ADLS Gen2 Parquet and triggers PySpark Delta pipeline.",
+        "parameters": {
+          "LastChangeVersion": {
+            "type": "int",
+            "defaultValue": 0
+          }
+        },
+        "activities": [
+          {
+            "name": "Lookup_CurrentChangeVersion",
+            "type": "Lookup",
+            "typeProperties": {
+              "source": {
+                "type": "SqlSource",
+                "sqlReaderQuery": "SELECT CHANGE_TRACKING_CURRENT_VERSION() AS CurrentVersion;"
+              },
+              "dataset": {
+                "referenceName": "DS_SQLServer_OnPrem",
+                "type": "DatasetReference"
+              }
+            }
+          },
+          {
+            "name": "Copy_CDC_To_ADLS_Parquet",
+            "type": "Copy",
+            "dependsOn": [
+              {
+                "activity": "Lookup_CurrentChangeVersion",
+                "dependencyConditions": ["Succeeded"]
+              }
+            ],
+            "typeProperties": {
+              "source": {
+                "type": "SqlSource",
+                "sqlReaderQuery": "SELECT ct.SYS_CHANGE_VERSION, ct.SYS_CHANGE_OPERATION, c.* FROM dbo.Customers c RIGHT OUTER JOIN CHANGETABLE(CHANGES dbo.Customers, @{pipeline().parameters.LastChangeVersion}) AS ct ON c.CustomerID = ct.CustomerID"
+              },
+              "sink": {
+                "type": "ParquetSink",
+                "storeSettings": {
+                  "type": "AzureBlobFSWriteSettings"
+                }
+              }
+            },
+            "inputs": [
+              {
+                "referenceName": "DS_SQLServer_Customers",
+                "type": "DatasetReference"
+              }
+            ],
+            "outputs": [
+              {
+                "referenceName": "DS_ADLS_CDC_Parquet",
+                "type": "DatasetReference"
+              }
+            ]
+          },
+          {
+            "name": "Trigger_Databricks_SCD2_Merge",
+            "type": "DatabricksNotebook",
+            "dependsOn": [
+              {
+                "activity": "Copy_CDC_To_ADLS_Parquet",
+                "dependencyConditions": ["Succeeded"]
+              }
+            ],
+            "typeProperties": {
+              "notebookPath": "/Shared/Migration/02_pyspark_scd2_modernized",
+              "baseParameters": {
+                "change_version": {
+                  "value": "@activity('Lookup_CurrentChangeVersion').output.firstRow.CurrentVersion",
+                  "type": "Expression"
+                }
+              }
+            },
+            "linkedServiceName": {
+              "referenceName": "LS_AzureDatabricks",
+              "type": "LinkedServiceReference"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

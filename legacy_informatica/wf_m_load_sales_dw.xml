@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE POWERMART SYSTEM "powrmart.dtd">
+<POWERMART CREATION_DATE="10/24/2024 14:00:00" REPOSITORY_VERSION="187.96">
+  <REPOSITORY NAME="REP_PROD_EDW" VERSION="187" CODEPAGE="UTF-8">
+    <FOLDER NAME="SALES_MIGRATION" GROUP="" OWNER="Administrator">
+      <MAPPING NAME="m_load_dim_customer_scd2" ISVALID="YES">
+        <!-- Source Qualifier Transformation -->
+        <TRANSFORMATION NAME="SQ_Customers" TYPE="Source Qualifier">
+          <TABLEATTRIBUTE NAME="Sql Query" VALUE="SELECT CustomerCode, FirstName, LastName, Email, AddressLine, City, StateCode, PostalCode, Country FROM dbo.Customers"/>
+        </TRANSFORMATION>
+        
+        <!-- Expression Transformation -->
+        <TRANSFORMATION NAME="EXP_Clean_Fields" TYPE="Expression">
+          <TRANSFORMFIELD NAME="IN_FirstName" DATATYPE="string" PORTTYPE="INPUT"/>
+          <TRANSFORMFIELD NAME="IN_LastName" DATATYPE="string" PORTTYPE="INPUT"/>
+          <TRANSFORMFIELD NAME="OUT_FullName" DATATYPE="string" PORTTYPE="OUTPUT" EXPRESSION="LTRIM(RTRIM(IN_FirstName)) || ' ' || LTRIM(RTRIM(IN_LastName))"/>
+          <TRANSFORMFIELD NAME="OUT_Email" DATATYPE="string" PORTTYPE="OUTPUT" EXPRESSION="LOWER(IN_Email)"/>
+        </TRANSFORMATION>
+        
+        <!-- Lookup Transformation -->
+        <TRANSFORMATION NAME="LKP_Dim_Customer_Existing" TYPE="Lookup Procedure">
+          <TABLEATTRIBUTE NAME="Lookup Source Filter" VALUE="IsCurrent = 1"/>
+          <TABLEATTRIBUTE NAME="Lookup condition" VALUE="CustomerCode = IN_CustomerCode"/>
+        </TRANSFORMATION>
+
+        <!-- Router Transformation -->
+        <TRANSFORMATION NAME="RTR_Insert_Update" TYPE="Router">
+          <GROUP NAME="GRP_NEW_CUSTOMER" EXPRESSION="ISNULL(LKP_CustomerKey)"/>
+          <GROUP NAME="GRP_CHANGED_CUSTOMER" EXPRESSION="NOT ISNULL(LKP_CustomerKey) AND (LKP_Email != IN_Email OR LKP_Address != IN_Address)"/>
+        </TRANSFORMATION>
+      </MAPPING>
+    </FOLDER>
+  </REPOSITORY>
+</POWERMART>
